@@ -16,6 +16,17 @@
              (layout/format-crap {:mu 1.2 :max 2.0 :sigma 0.4}))
     (should-be-nil (layout/format-crap nil))))
 
+(describe "three-area layout"
+  (it "shows both diagrams at normal width and tabs them at narrow width"
+    (let [wide (layout/panels 1500 920 :structure)
+          narrow (layout/panels 900 920 :behavior)]
+      (should= 610 (get-in wide [:structure :w]))
+      (should= 610 (get-in wide [:behavior :w]))
+      (should= 1220 (get-in wide [:context :x]))
+      (should-be-nil (:structure narrow))
+      (should= 620 (get-in narrow [:behavior :w]))
+      (should (layout/in-rect? (:behavior-tab narrow) 500 10)))))
+
 (def sample
   (ir/normalize
     {:packages

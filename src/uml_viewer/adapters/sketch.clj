@@ -6,6 +6,7 @@
             [quil.middleware :as m]
             [uml-viewer.application.detail :as detail]
             [uml-viewer.application.document :as document]
+            [uml-viewer.application.guide :as guide]
             [uml-viewer.adapters.draw :as draw]
             [uml-viewer.application.events :as events]
             [uml-viewer.engine.hit :as hit]
@@ -558,10 +559,11 @@
 
 (defn- view-dims []
   (let [w (q/width)
-        h (q/height)]
+        h (q/height)
+        pane (:structure (layout/panels w h :structure))]
     {:window-w w
      :window-h h
-     :view-w (max 0 (- w layout/sidebar-w))}))
+     :view-w (:w pane)}))
 
 (defn- apply-proposal-op [state op]
   (case (:op op)
@@ -708,8 +710,18 @@
   (let [[w h] (applet-size)
         x (:x event)
         y (:y event)
-        in-sidebar? (>= x (- w layout/sidebar-w))]
+        {:keys [behavior structure-tab behavior-tab]}
+        (layout/panels w h (:active-panel state))
+        in-sidebar? (>= x (- w layout/sidebar-w))
+        n (count (policy/named-proposals (:doc state)))
+        info (guide/selection-info state)]
     (cond
+      (layout/in-rect? structure-tab x y)
+      (assoc state :active-panel :structure)
+
+      (layout/in-rect? behavior-tab x y)
+      (assoc state :active-panel :behavior)
+
       (events/regen-hit? x y w h)
       (let [root (overlay/metrics-root (:path state))
             {:keys [woke?]} (request-regen! root)]
@@ -720,6 +732,17 @@
       in-sidebar?
       (let [hit (events/inspector-hit state x y w)]
         (cond
+          (and (layout/in-rect? (layout/context-source-rect w n) x y)
+               (:source info))
+          (do (source-window/open-member-window! (:source @!bridge) (:source info))
+              state)
+
+          (and (layout/in-rect? (layout/context-action-rect w n) x y)
+               (guide/context-action state))
+          (case (guide/context-action state)
+            :show-in-structure (events/show-in-structure state)
+            :show-related-behavior (events/show-related-behavior state))
+
           (and (right-click? event) (= :proposal (:kind hit)))
           (do (popup-proposal-menu!
                 event x y (:id hit)
@@ -730,6 +753,20 @@
                   (mail-context! next))
                 next)
           :else state))
+
+      (layout/in-rect? behavior x y)
+      (if (and (:behavior-focus state) (< y 96))
+        (events/back-behavior state)
+        (let [items (guide/visible-items (:behavior-focus state))
+              rects (layout/behavior-nodes behavior (count items))
+              item (some (fn [[item rect]]
+                           (when (layout/in-rect? rect x y) item))
+                         (map vector items rects))]
+          (cond
+            (nil? item) state
+            (and (>= (click-count event) 2) (guide/stage (:id item)))
+            (events/drill-behavior state (:id item))
+            :else (events/select-behavior state (:id item)))))
 
       :else
       (let [state (events/on-press state x y)
@@ -773,9 +810,14 @@
   (let [shift? (boolean
                  (or (when (instance? MouseEvent event)
                        (.isShiftDown ^MouseEvent event))
-                     (applet-shift?)))]
-    (events/on-scroll state event
-                      (assoc (view-dims) :horizontal? shift?))))
+                     (applet-shift?)))
+        pane (:behavior (layout/panels (q/width) (q/height)
+                                        (:active-panel state)))]
+    (if (and (number? (:x event)) (number? (:y event))
+             (layout/in-rect? pane (:x event) (:y event)))
+      state
+      (events/on-scroll state event
+                        (assoc (view-dims) :horizontal? shift?)))))
 
 (defn- on-main-close [state]
   (close-detail-window!)
@@ -812,7 +854,12 @@
     :draw #'draw/draw-state
     :mouse-pressed #'on-main-press
     :mouse-moved (fn [state event]
-                   (events/on-move state (:x event) (:y event)))
+                   (if (layout/in-rect?
+                         (:structure (layout/panels (q/width) (q/height)
+                                                    (:active-panel state)))
+                         (:x event) (:y event))
+                     (events/on-move state (:x event) (:y event))
+                     (assoc state :hover nil)))
     :mouse-wheel #'on-main-wheel
     :key-pressed (fn [state event]
                    (swallow-esc! event)

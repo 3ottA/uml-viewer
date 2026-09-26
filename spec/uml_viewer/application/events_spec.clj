@@ -2,7 +2,9 @@
   (:require [speclj.core :refer :all]
             [uml-viewer.engine.compose :as compose]
             [uml-viewer.application.detail :as detail]
+            [uml-viewer.application.document :as document]
             [uml-viewer.application.events :as events]
+            [uml-viewer.application.guide :as guide]
             [uml-viewer.domain.geom :as geom]
             [uml-viewer.domain.ir :as ir]
             [uml-viewer.engine.layout :as layout]))
@@ -310,3 +312,31 @@
       (should= [] (:focus (events/on-key opened :esc)))
       (should= [] (:focus (events/back opened)))
       (should= s (events/back s)))))
+
+(describe "built-in workflow"
+  (it "lets a reader drill, inspect a function, and navigate related structure"
+    (let [s (document/load-path "examples/uml-viewer.edn")
+          selected (events/select-behavior s :read-and-scan)
+          drilled (events/drill-behavior selected :read-and-scan)
+          function-step (events/select-behavior drilled :read-policy)
+          structure (events/show-in-structure function-step)
+          related (events/show-related-behavior
+                    (assoc s :selected {:kind :class :id :application}))]
+      (should= :read-and-scan (get-in selected [:selected :id]))
+      (should= :read-and-scan (:behavior-focus drilled))
+      (should= :read-policy (get-in function-step [:selected :id]))
+      (should= [:application] (:structure-highlight structure))
+      (should= :structure (:active-panel structure))
+      (should= [:read-and-scan :build-ir :load-diagram]
+               (:behavior-highlight related))
+      (should= :behavior (:active-panel related))
+      (should= s (events/show-related-behavior s))
+      (let [other (document/load-path "examples/library.edn")]
+        (should= other (events/select-behavior other :read-and-scan)))
+      (should-not (guide/available? (assoc s :path "examples/copied-diagram.edn")))
+      (should= ["compose" "curve" "hit" "layout" "route"]
+               (:children (guide/structure-facts (:doc s) :engine)))
+      (should= {:selected {:kind :class :id :application} :proposal-id :example}
+               (events/show-related-behavior
+                 {:selected {:kind :class :id :application}
+                  :proposal-id :example})))))

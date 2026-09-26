@@ -15,6 +15,25 @@
 (def lane-gap 10)
 (def sidebar-w 280)
 
+(defn panels [window-w window-h active]
+  (let [content-w (max 0 (- window-w sidebar-w))
+        split? (>= window-w 1100)
+        left-w (if split? (quot content-w 2) content-w)
+        left {:x 0 :y 0 :w left-w :h window-h}
+        right {:x left-w :y 0 :w (- content-w left-w) :h window-h}]
+    {:structure (when (or split? (not= active :behavior)) left)
+     :behavior (if split? right (when (= active :behavior) left))
+     :context {:x content-w :y 0 :w sidebar-w :h window-h}
+     :structure-tab (when-not split? {:x 0 :y 0 :w (quot content-w 2) :h 30})
+     :behavior-tab (when-not split? {:x (quot content-w 2) :y 0
+                                     :w (- content-w (quot content-w 2)) :h 30})}))
+
+(defn behavior-nodes [pane count]
+  (mapv (fn [i]
+          {:x (+ (:x pane) 24) :y (+ 104 (* i 96))
+           :w (max 0 (- (:w pane) 48)) :h 62})
+        (range count)))
+
 (defn regen-button
   "Screen-space rect of the inspector Regen control."
   [window-w window-h]
@@ -68,6 +87,14 @@
   (let [d (declutter-rect 1500 (or n 0))]
     (+ (:y d) inspector-btn-h 16)))
 
+(defn context-action-rect [window-w n]
+  {:x (inspector-x window-w) :y (+ (inspector-body-y n) 140)
+   :w (inspector-inner-w) :h inspector-btn-h})
+
+(defn context-source-rect [window-w n]
+  {:x (inspector-x window-w) :y (+ (inspector-body-y n) 176)
+   :w (inspector-inner-w) :h inspector-btn-h})
+
 (defn in-rect? [r x y]
   (and r
        (>= x (:x r)) (< x (+ (:x r) (:w r)))
@@ -80,10 +107,10 @@
 
 (defn format-crap [crap]
   (when (:mu crap)
-    (format "Crap μ %.1f   max %.1f   σ %.1f"
-            (double (:mu crap))
-            (double (or (:max crap) (:mu crap)))
-            (double (or (:sigma crap) 0)))))
+    (String/format java.util.Locale/US "Crap μ %.1f   max %.1f   σ %.1f"
+                   (to-array [(double (:mu crap))
+                              (double (or (:max crap) (:mu crap)))
+                              (double (or (:sigma crap) 0))]))))
 
 (defn format-coverage [p]
   (when p

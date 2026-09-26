@@ -27,6 +27,7 @@
  :omit [],
  :edges
  [{:from :main.uml-viewer, :to :adapters.core, :kind :dependency}
+  {:from :adapters.draw, :to :application.guide, :kind :dependency}
   {:from :clojure-language.source-clojure, :to :source, :kind :implements}
   {:from :adapters.draw, :to :application.document, :kind :dependency}
   {:from :application.document, :to :domain.hierarchy, :kind :dependency}
@@ -53,6 +54,7 @@
   {:from :adapters.draw, :to :engine.hit, :kind :dependency}
   {:from :clojure-language.graph-clojure, :to :graph, :kind :implements}
   {:from :adapters.draw, :to :domain.geom, :kind :dependency}
+  {:from :application.events, :to :application.guide, :kind :dependency}
   {:from :application.events, :to :domain.hierarchy, :kind :dependency}
   {:from :engine.compose, :to :engine.layout, :kind :dependency}
   {:from :engine.compose, :to :engine.route, :kind :dependency}
@@ -88,6 +90,7 @@
   {:from :application.events, :to :engine.hit, :kind :dependency}
   {:from :adapters.sketch, :to :application.overlay, :kind :dependency}
   {:from :application.document, :to :application.overlay, :kind :dependency}
+  {:from :adapters.sketch, :to :application.guide, :kind :dependency}
   {:from :application.document, :to :domain.mailbox, :kind :dependency}
   {:from :engine.route, :to :domain.geom, :kind :dependency}
   {:from :adapters.source-window, :to :javax.swing, :kind :dependency}
@@ -126,6 +129,11 @@
   {:id :application.events,
    :name "Events",
    :ns "uml-viewer.application.events",
+   :stereotype nil,
+   :level 2}
+  {:id :application.guide,
+   :name "Guide",
+   :ns "uml-viewer.application.guide",
    :stereotype nil,
    :level 2}
   {:id :application.ir-generator,

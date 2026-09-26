@@ -98,7 +98,8 @@
 
 (def session-keys
   [:focus :proposal-id :proposal :open-layer :declutter
-   :cam-x :cam-y :zoom :selected :detail-id])
+   :cam-x :cam-y :zoom :selected :detail-id
+   :behavior-focus :active-panel])
 
 (defn save-session!
   "Write the current view (depth, pan, zoom, proposal) for --restart."
@@ -172,7 +173,9 @@
                  :cam-y (or (:cam-y snap) 0)
                  :zoom (or (:zoom snap) 1.0)
                  :selected (:selected snap)
-                 :detail-id (:detail-id snap))
+                 :detail-id (:detail-id snap)
+                 :behavior-focus (:behavior-focus snap)
+                 :active-panel (:active-panel snap))
           drop-missing-detail))))
 
 (defn restart-state

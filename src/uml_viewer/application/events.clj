@@ -2,6 +2,7 @@
   (:require [clojure.string :as str]
             [uml-viewer.application.detail :as detail]
             [uml-viewer.application.document :as document]
+            [uml-viewer.application.guide :as guide]
             [uml-viewer.domain.hierarchy :as hierarchy]
             [uml-viewer.engine.hit :as hit]
             [uml-viewer.engine.layout :as layout]
@@ -25,7 +26,9 @@
                                     (view-opts state))
       :cam-x 0
       :cam-y 0
-      :selected nil)
+      :selected nil
+      :structure-highlight nil
+      :behavior-highlight nil)
     state))
 
 (defn show-proposal
@@ -138,6 +141,42 @@
     (seq (:focus state)) (rebuild (update state :focus pop))
     :else state))
 
+(defn select-behavior [state id]
+  (if (and (guide/available? state)
+           (some #(= id (:id %)) (guide/visible-items (:behavior-focus state))))
+    (assoc state :selected {:kind :behavior :id id}
+                 :structure-highlight (when (nil? (:proposal-id state))
+                                        (:participants (guide/item id)))
+                 :behavior-highlight nil)
+    state))
+
+(defn drill-behavior [state id]
+  (if (guide/stage id)
+    (assoc state :behavior-focus id :selected nil :behavior-highlight nil)
+    state))
+
+(defn back-behavior [state]
+  (assoc state :behavior-focus nil :selected nil :behavior-highlight nil))
+
+(defn show-related-behavior [state]
+  (let [ids (when (and (nil? (:proposal-id state))
+                       (guide/available? state))
+              (guide/related-stages (get-in state [:selected :id])))]
+    (if (seq ids)
+      (assoc state :behavior-focus nil :behavior-highlight ids
+                   :active-panel :behavior)
+      state)))
+
+(defn show-in-structure [state]
+  (if (and (nil? (:proposal-id state))
+           (= :behavior (get-in state [:selected :kind])))
+    (let [participants (:participants (guide/item (get-in state [:selected :id])))
+          next (rebuild (assoc state :focus [] :open-layer nil))]
+      (assoc next :selected (:selected state)
+                  :structure-highlight participants
+                  :active-panel :structure))
+    state))
+
 (defn- view-classes [doc path]
   (mapcat :classes (:packages (hierarchy/view-at doc path))))
 
@@ -203,7 +242,8 @@
     (back state)
     (let [[wx wy] (world-xy state x y)
           hit (hit/at (:scene state) wx wy)]
-      (assoc state :selected hit))))
+      (assoc state :selected hit :structure-highlight nil
+                   :behavior-highlight nil))))
 
 (defn on-scroll [state amount opts]
   (let [opts (if (map? opts) opts {:window-h opts :window-w 1500})
@@ -288,8 +328,10 @@
        :right (on-scroll state 2 (assoc dims :horizontal? true))
        :up (on-scroll state -2 dims)
        :down (on-scroll state 2 dims)
-       :esc (if (or (seq (:focus state)) (:open-layer state))
-              (back state)
-              (assoc state :selected nil))
+       :esc (cond
+              (and (= :behavior (:active-panel state)) (:behavior-focus state))
+              (back-behavior state)
+              (or (seq (:focus state)) (:open-layer state)) (back state)
+              :else (assoc state :selected nil))
        :r (-> state (dissoc :waiting) (assoc :mtime 0 :metrics-stamp nil))
        state))))

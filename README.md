@@ -127,6 +127,27 @@ Rename or move of a function is a new form: overlay does not match old names.
 
 ## Navigation
 
+### Structure, Behavior, and Context
+
+When viewing this repository, **Behavior** shows an authored guide to the
+policy/source → generated EDN → displayed diagram workflow. Its four stages
+drill into named functions; arrows in a drilled stage represent source-supported
+calls or data handoffs. The EDN file marks the boundary between the generator
+and viewer processes. Other repositories show an empty Behavior area.
+
+**Context** shows facts about the selected Structure or Behavior item and, for
+the built-in guide, a separate Curated explanation with an Open source action.
+The guide covers every top-level Structure component and each workflow stage
+and function. Selecting a Behavior step highlights participating Structure
+components; **Show in Structure** navigates there. Selecting Structure leaves
+Behavior alone; **Show related behavior** opens the workflow and highlights
+related stages. The guide remains visible beside proposals, with links between
+the panels disabled. On narrow windows, switch between Structure and Behavior
+using the tabs above them.
+
+This first guide is static and is not checked against the viewed checkout at
+load time. It is a possible code path, not an execution trace.
+
 **Layer** and **component** mean the same thing: a namespace grouping
 (the first segment after the prefix, or a named proposal group).
 

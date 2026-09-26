@@ -6,6 +6,7 @@
             [uml-viewer.engine.curve :as curve]
             [uml-viewer.application.detail :as detail]
             [uml-viewer.application.document :as document]
+            [uml-viewer.application.guide :as guide]
             [uml-viewer.engine.hit :as hit]
             [uml-viewer.engine.layout :as layout]
             [uml-viewer.domain.hierarchy :as hierarchy])
@@ -427,7 +428,7 @@
     (q/text-align :left :top)
     (q/text-size 16)
     (rgb gold)
-    (q/text "Inspector" (+ x 16) 16)
+    (q/text "Context" (+ x 16) 16)
     (let [real (layout/real-diagram-rect w)
           real-on? (nil? selected)
           real-label (or (get-in state [:doc :title]) "Real diagram")]
@@ -532,6 +533,23 @@
                    " classes")
               (+ x 16) y))))
 
+(defn- draw-sidebar-component [x y state id]
+  (let [{:keys [parent children dependencies source]}
+        (guide/structure-facts (:doc state) id)]
+    (q/text-align :left :top)
+    (q/text-size 13)
+    (rgb ink)
+    (q/text (name id) (+ x 16) y)
+    (q/text-size 11)
+    (rgb muted)
+    (q/text (str "Namespace: uml-viewer." (name id)
+                 "\nParent: " parent
+                 "\nChildren: " (if (seq children) (str/join ", " children) "none")
+                 "\nDependencies: " (if (seq dependencies)
+                                      (str/join ", " dependencies) "none")
+                 "\nSource: " source)
+            (+ x 16) (+ y 22) (- layout/sidebar-w 32) 112)))
+
 (defn- draw-sidebar-error [x h err]
   (rgb [224 122 74])
   (q/text (str "IR error:\n" err) (+ x 16) (- h 120)))
@@ -553,17 +571,147 @@
 
 (defn- draw-sidebar [state]
   (let [x (draw-sidebar-chrome state)
-        y (layout/inspector-body-y (count (hierarchy/named-proposals (:doc state))))
+        n (count (hierarchy/named-proposals (:doc state)))
+        y (layout/inspector-body-y n)
         sel (:selected state)
-        scene (:scene state)]
+        scene (:scene state)
+        behavior? (= :behavior (:kind sel))
+        info (guide/selection-info state)
+        source (:source info)
+        action (case (guide/context-action state)
+                 :show-in-structure "Show in Structure"
+                 :show-related-behavior "Show related behavior"
+                 nil)]
     (case (:kind sel)
       nil (draw-sidebar-empty x y)
-      :class (draw-sidebar-class x y scene (:id sel))
+      :class (if (and info (not (str/includes? (name (:id sel)) ".")))
+               (draw-sidebar-component x y state (:id sel))
+               (draw-sidebar-class x y scene (:id sel)))
+      :child (do
+               (q/text-align :left :top)
+               (q/text-size 13)
+               (rgb ink)
+               (q/text (name (:id sel)) (+ x 16) y)
+               (q/text-size 11)
+               (rgb muted)
+               (q/text (str "Child component of " (name (:parent sel)))
+                       (+ x 16) (+ y 22)))
       :package (draw-sidebar-package x y scene (:id sel))
+      :behavior (when info
+                  (q/text-align :left :top)
+                  (q/text-size 13)
+                  (rgb ink)
+                  (q/text (:label info) (+ x 16) y)
+                  (q/text-size 11)
+                  (rgb muted)
+                  (q/text (cond (:file info) "File handoff"
+                                (:behavior-focus state) "Function step"
+                                :else "Workflow stage")
+                          (+ x 16) (+ y 22))
+                  (q/text (if-let [file (:file info)]
+                            file
+                            (str "Participants: "
+                                 (str/join ", " (map name (:participants info)))))
+                          (+ x 16) (+ y 44) (- layout/sidebar-w 32) 65))
       nil)
+    (when action
+      (draw-btn (layout/context-action-rect (q/width) n) action))
+    (when source
+      (draw-btn (layout/context-source-rect (q/width) n) "Open source"))
+    (when-let [prose (:text info)]
+      (q/text-align :left :top)
+      (q/text-size 12)
+      (rgb gold)
+      (q/text "Curated explanation" (+ x 16) (+ y 220))
+      (rgb ink)
+      (q/text prose (+ x 16) (+ y 244) (- layout/sidebar-w 32) 190)
+      (when source
+        (rgb muted)
+        (q/text (str (:ns source) (when (:name source) (str "/" (:name source))))
+                (+ x 16) (+ y 445) (- layout/sidebar-w 32) 55)))
     (when-let [err (:error state)]
       (draw-sidebar-error x (q/height) err))
     (draw-regen-button state)))
+
+(defn- draw-behavior [state pane]
+  (rgb [18 26 29])
+  (q/no-stroke)
+  (q/rect (:x pane) 0 (:w pane) (:h pane))
+  (q/stroke 42 61 54)
+  (q/line (:x pane) 0 (:x pane) (:h pane))
+  (q/text-align :left :top)
+  (q/text-size 16)
+  (rgb gold)
+  (q/text "Behavior" (+ (:x pane) 20) 12)
+  (q/text-size 11)
+  (rgb muted)
+  (q/text "Possible code path" (+ (:x pane) 20) 38)
+  (if-not (guide/available? state)
+    (do (rgb muted)
+        (q/text-size 13)
+        (q/text "No workflow available for this repository."
+                (+ (:x pane) 20) 78))
+    (let [focus (:behavior-focus state)
+          items (guide/visible-items focus)
+          rects (layout/behavior-nodes pane (count items))
+          by-id (zipmap (map :id items) rects)
+          index (zipmap (map :id items) (range))
+          edges (if focus (:edges (guide/stage focus))
+                    (map vector (map :id items) (map :id (rest items))))]
+      (when-not focus
+        (q/text-size 11)
+        (rgb muted)
+        (q/text "Generator process" (+ (:x pane) 28) 82)
+        (q/text "Viewer process" (+ (:x pane) 28) 376))
+      (when focus
+        (q/text-size 13)
+        (rgb muted)
+        (q/text (str "← " (:label (guide/stage focus)))
+                (+ (:x pane) 20) 64))
+      (doseq [[from to] edges
+              :let [a (get by-id from) b (get by-id to)]
+              :when (and a b)]
+        (if (or (= to :generated-edn) (= from :generated-edn))
+          (q/stroke 232 196 72)
+          (q/stroke 90 150 122))
+        (q/stroke-weight 2)
+        (if (= 1 (- (index to) (index from)))
+          (q/line (geom/cx a) (geom/bottom a) (geom/cx b) (:y b))
+          (let [track (- (+ (:x pane) (:w pane)) 12)]
+            (q/line (geom/right a) (geom/cy a) track (geom/cy a))
+            (q/line track (geom/cy a) track (geom/cy b))
+            (q/line track (geom/cy b) (geom/right b) (geom/cy b))))
+        (q/no-stroke)
+        (rgb good)
+        (if (= 1 (- (index to) (index from)))
+          (q/triangle (- (geom/cx b) 5) (- (:y b) 7)
+                      (+ (geom/cx b) 5) (- (:y b) 7)
+                      (geom/cx b) (:y b))
+          (q/triangle (+ (geom/right b) 7) (- (geom/cy b) 5)
+                      (+ (geom/right b) 7) (+ (geom/cy b) 5)
+                      (geom/right b) (geom/cy b)))
+        (when (or (= to :generated-edn) (= from :generated-edn))
+          (q/text-size 10)
+          (rgb gold)
+          (q/text-align :left :center)
+          (q/text (if (= to :generated-edn) "writes file" "reads file")
+                  (+ (geom/cx a) 12) (/ (+ (geom/bottom a) (:y b)) 2))))
+      (doseq [[item r] (map vector items rects)
+              :let [selected? (= (:id item) (get-in state [:selected :id]))
+                    highlighted? (some #{(:id item)} (:behavior-highlight state))]]
+        (rgb (if (= :generated-edn (:id item)) [53 50 31] [31 54 49]))
+        (q/no-stroke)
+        (q/rect (:x r) (:y r) (:w r) (:h r) 6)
+        (when (or selected? highlighted?)
+          (q/no-fill)
+          (q/stroke-weight 2)
+          (q/stroke (if selected? 232 95) (if selected? 196 181)
+                    (if selected? 72 138))
+          (q/rect (:x r) (:y r) (:w r) (:h r) 6))
+        (q/text-align :left :center)
+        (q/text-size 13)
+        (rgb ink)
+        (q/text (:label item) (+ (:x r) 12) (geom/cy r))))))
 
 (defn- in-view? [r cam-x cam-y vw vh]
   (and r
@@ -581,14 +729,17 @@
     (q/text document/waiting-message (/ vw 2.0) (/ vh 2.0))))
 
 (defn draw-state [state]
+  (let [{:keys [structure behavior structure-tab behavior-tab]}
+        (layout/panels (q/width) (q/height) (:active-panel state))]
   (apply q/background bg)
   (when (:waiting state)
     (draw-waiting))
+  (when structure
   (q/push-matrix)
   (let [z (double (or (:zoom state) 1.0))
         cam-x (:cam-x state 0)
         cam-y (:cam-y state 0)
-        vw (max 0 (- (q/width) layout/sidebar-w))
+        vw (:w structure)
         vh (q/height)
         world-w (/ vw z)
         world-h (/ vh z)
@@ -636,29 +787,42 @@
                       (some #(in-view? (:rect %) cam-x cam-y world-w world-h)
                             (concat (:in-ports c) (:out-ports c))))]
       (draw-class c
-                  (= sel-id (:id c))
+                  (or (= sel-id (:id c))
+                      (and (nil? (:proposal-id state))
+                           (some #(or (= % (:id c))
+                                      (str/starts-with? (name (:id c))
+                                                        (str (name %) ".")))
+                                 (:structure-highlight state))))
                   (= hover-id (:id c))
                   hover
                   sel))
     (doseq [ind (:dep-indicators scene)]
       (draw-dep-triangle ind)))
   (q/pop-matrix)
+  )
+  (when behavior
+    (draw-behavior state behavior))
+  (when structure-tab
+    (draw-btn structure-tab "Structure")
+    (draw-btn behavior-tab "Behavior"))
   (draw-sidebar state)
-  (when (and (not (:waiting state))
+  (when (and structure (not (:waiting state))
              (get-in state [:scene :diagram :title]))
     (q/text-align :left :top)
     (if (get-in state [:scene :diagram :proposal])
       (do
         (rgb gold)
         (q/text-size 16)
-        (q/text (or (get-in state [:scene :diagram :title])
-                    "PROPOSAL — not instantiated in code")
+        (q/text (str "Structure · "
+                     (or (get-in state [:scene :diagram :title])
+                         "PROPOSAL — not instantiated in code"))
                 12 8))
       (do
         (rgb muted)
         (q/text-size 12)
-        (q/text (get-in state [:scene :diagram :title]) 12 8))))
-  (when (or (seq (:focus state)) (:open-layer state))
+        (q/text (str "Structure · " (get-in state [:scene :diagram :title]))
+                12 8))))
+  (when (and structure (or (seq (:focus state)) (:open-layer state)))
     (rgb gold)
     (q/text-align :left :top)
     (q/text-size 14)
@@ -667,7 +831,8 @@
                   (or (get-in state [:scene :diagram :title])
                       (name (:open-layer state))))]
       (q/text (str "← " label) 12 28)))
-  (draw-edge-popup (:hover state) (:pointer state)))
+  (when structure
+    (draw-edge-popup (:hover state) (:pointer state)))))
 
 (defn- detail-row-color [row]
   (case (:kind row)

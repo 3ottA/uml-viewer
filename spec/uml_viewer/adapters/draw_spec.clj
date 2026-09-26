@@ -386,11 +386,11 @@
         (should-not-contain :rect (kinds log))))))
 
 (describe "draw-sidebar"
-  (it "explains the empty inspector"
+  (it "explains the empty Context panel"
     (record-quil
       (fn [log]
         (call 'draw-sidebar {:selected nil :scene (scene)})
-        (should-contain "Inspector" (texts log))
+        (should-contain "Context" (texts log))
         (should (some #(re-find #"Click a component" %) (texts log)))
         (should (some #(re-find #"Double-click a component" %) (texts log))))))
 
@@ -556,8 +556,8 @@
           (should-contain :pop-matrix (kinds log))
           (should-contain [:scale 1.0] @log)
           (should-contain [:translate -7 -9] @log)
-          (should-contain "Inspector" (texts log))
-          (should-contain "Tiny" (texts log))
+          (should-contain "Context" (texts log))
+          (should (some #(re-find #"Tiny" %) (texts log)))
           (should-contain "Adapters" (texts log))
           (should-not-contain "Ghost" (texts log))
           (should-contain "A" (texts log))
@@ -571,7 +571,7 @@
                              :cam-x 0 :cam-y 0})
           (should-contain document/waiting-message (texts log))
           (should-not-contain "Tiny" (texts log))
-          (should-contain "Inspector" (texts log))))))
+          (should-contain "Context" (texts log))))))
 
   (it "paints the class level number at the upper left"
     (record-quil
@@ -590,7 +590,8 @@
                                     :title "PROPOSAL — not instantiated in code")
                      :cam-x 0 :cam-y 0}]
           (call 'draw-state state)
-          (should-contain "PROPOSAL — not instantiated in code" (texts log))
+          (should (some #(re-find #"PROPOSAL — not instantiated in code" %)
+                        (texts log)))
           (should-not-contain "P returns to the namespace tree." (texts log))
           (should (painted? log :fill draw/gold)))))))
 
@@ -642,3 +643,23 @@
     (should= [95 181 138] (draw/coverage-ink 0.8))
     (should= draw/gold (draw/coverage-ink 0.5))
     (should= [224 122 74] (draw/coverage-ink 0.49))))
+
+(describe "built-in workflow drawing"
+  (it "shows the possible path and Curated explanation in the three-area window"
+    (record-quil
+      (fn [log]
+        (let [state (document/load-path "examples/uml-viewer.edn")]
+          (draw/draw-state state)
+          (should-contain "Possible code path" (texts log))
+          (should-contain "Generated EDN file" (texts log))
+          (should-contain "writes file" (texts log))
+          (should-contain "reads file" (texts log))
+          (reset! log [])
+          (draw/draw-state (assoc state :selected {:kind :class :id :application}))
+          (should-contain "Curated explanation" (texts log))
+          (should (some #(re-find #"Parent: repository root" %) (texts log)))
+          (should-contain "Show related behavior" (texts log))
+          (reset! log [])
+          (draw/draw-state (assoc state :selected {:kind :behavior :id :read-and-scan}))
+          (should (some #(re-find #"Participants: main, application" %)
+                        (texts log))))))))
